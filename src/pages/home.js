@@ -4,6 +4,10 @@
 
 export const home = {
   path: '/',
+  interaction: {
+    allowWheelScroll: false,
+    blockWheelZoom: true,
+  },
   scenes: [
     {
       id: 'canvas3d',

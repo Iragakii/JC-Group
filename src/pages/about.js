@@ -4,6 +4,10 @@
 
 export const about = {
   path: '/about',
+  interaction: {
+    allowWheelScroll: false,
+    blockWheelZoom: true,
+  },
   scenes: [
     {
       id: 'canvas3d',

@@ -1,85 +1,124 @@
-/* ═══════════════════════════════════════════════════════════════
-   MAIN.JS — Entry Point
-   Wires together the router, pages, and Spline scene loader.
-   Supports pages with multiple Spline scenes.
-   ═══════════════════════════════════════════════════════════════ */
-
 import { Application } from '@splinetool/runtime';
 import { Router } from './router.js';
 import { home } from './pages/home.js';
 import { service } from './pages/service.js';
 import { about } from './pages/about.js';
 
-// ─── DOM ───────────────────────────────────────────────────────
 const loader = document.getElementById('loader');
 const navLinks = document.querySelectorAll('.glass-nav-link');
 const sceneContainer = document.getElementById('scene-container');
-const section1 = document.getElementById('scene-section-1');
 const section2 = document.getElementById('scene-section-2');
 const canvas1 = document.getElementById('canvas3d');
 const canvas2 = document.getElementById('canvas3d-2');
 
-// ─── Active Spline instances ───────────────────────────────────
 let splineInstances = [];
+let cleanupSceneSync = () => {};
 
 function disposeAll() {
-  splineInstances.forEach(app => {
-    try { app.dispose(); } catch (e) { /* ignore */ }
+  cleanupSceneSync();
+  cleanupSceneSync = () => {};
+
+  splineInstances.forEach((app) => {
+    try {
+      app.dispose();
+    } catch (error) {
+      console.warn('Failed to dispose Spline app:', error);
+    }
   });
+
   splineInstances = [];
+  canvas1.onwheel = null;
+  canvas2.onwheel = null;
 }
 
-// ─── Configure a loaded Spline app ─────────────────────────────
-function configureScene(app, canvasEl, multiScene = false) {
-  // Remove watermark
-  if (app._renderer && app._renderer.pipeline) {
+function getScenes(route) {
+  if (!route || !Array.isArray(route.scenes)) {
+    return [];
+  }
+
+  return route.scenes.filter((scene) => scene && typeof scene.sceneUrl === 'string');
+}
+
+function getInteraction(route, scenes) {
+  return {
+    allowWheelScroll: scenes.length > 1,
+    blockWheelZoom: scenes.length === 1,
+    ...(route?.interaction ?? {}),
+  };
+}
+
+function syncAppDomRect(app) {
+  if (!app?._eventManager?.eventContext) {
+    return;
+  }
+
+  app._eventManager.eventContext.domRect = app.canvas.getBoundingClientRect();
+}
+
+function setupSceneContainerSync(apps) {
+  const syncAll = () => {
+    apps.forEach(syncAppDomRect);
+  };
+
+  sceneContainer.addEventListener('scroll', syncAll, { passive: true });
+  window.addEventListener('resize', syncAll);
+  syncAll();
+
+  return () => {
+    sceneContainer.removeEventListener('scroll', syncAll);
+    window.removeEventListener('resize', syncAll);
+  };
+}
+
+function configureScene(app, canvasEl, interaction, scene) {
+  if (app._renderer?.pipeline) {
     app._renderer.pipeline.setWatermark(null);
   }
 
-  // Force matching background color across all scenes
   app.setBackgroundColor('#0b0b0b');
 
-  // Disable zoom on orbit controls
+  if (typeof scene?.zoom === 'number') {
+    app.setZoom(scene.zoom);
+  }
+
   const controls = app._eventManager?.controlsManager?.orbitControls
     || app.controls?.orbitControls;
+
   if (controls) {
     controls.enableZoom = false;
+    controls.enableRotate = false;
+    controls.enablePan = false;
   }
 
-  if (multiScene) {
-    // Multi-scene page: allow scrolling between sections
-    // Disable Spline's internal scroll prevention
-    if (app._eventManager) {
-      app._eventManager.preventScroll = false;
-      app._eventManager.preventTouchScroll = false;
-    }
-
-    // Let wheel events pass through to the scroll container
-    canvasEl.style.touchAction = 'pan-y';
-
-  } else {
-    // Single-scene page: block wheel zoom entirely
-    canvasEl.addEventListener('wheel', (e) => {
-      e.preventDefault();
-      e.stopImmediatePropagation();
-    }, { passive: false, capture: true });
+  if (app._eventManager) {
+    app._eventManager.preventZoom = true;
+    app._eventManager.preventScroll = !interaction.allowWheelScroll;
+    app._eventManager.preventTouchScroll = !interaction.allowWheelScroll;
   }
+
+  canvasEl.style.touchAction = interaction.allowWheelScroll ? 'pan-y' : 'auto';
 }
 
-// ─── Load all scenes for a page ────────────────────────────────
 async function loadPage(route) {
-  // Show loader
   loader.classList.remove('hidden');
   canvas1.classList.remove('loaded');
   canvas2.classList.remove('loaded');
 
-  // Dispose previous scenes
   disposeAll();
 
-  const scenes = route.scenes;
-  const isSingle = scenes.length === 1;
+  const scenes = getScenes(route);
 
-  // Show/hide second section
+  if (scenes.length === 0) {
+    console.error('No valid scenes found for route:', route);
+    section2.classList.add('hidden');
+    sceneContainer.classList.add('single-scene');
+    loader.classList.add('hidden');
+    return;
+  }
+
+  const isSingle = scenes.length === 1;
+  const interaction = getInteraction(route, scenes);
+
   if (isSingle) {
     section2.classList.add('hidden');
     sceneContainer.classList.add('single-scene');
@@ -88,45 +127,38 @@ async function loadPage(route) {
     sceneContainer.classList.remove('single-scene');
   }
 
-  // Scroll to top
   sceneContainer.scrollTop = 0;
 
   try {
-    // Load first scene
     const app1 = new Application(canvas1);
     await app1.load(scenes[0].sceneUrl);
     splineInstances.push(app1);
-    configureScene(app1, canvas1, !isSingle);
+    configureScene(app1, canvas1, interaction, scenes[0]);
     canvas1.classList.add('loaded');
-    console.log('✅ Scene 1 loaded:', scenes[0].sceneUrl);
 
-    // Hide loader after first scene loads
     loader.classList.add('hidden');
 
-    // Load second scene if exists (sequentially to reduce GPU pressure)
     if (scenes.length > 1) {
       const app2 = new Application(canvas2);
       await app2.load(scenes[1].sceneUrl);
       splineInstances.push(app2);
-      configureScene(app2, canvas2, true);
+      configureScene(app2, canvas2, interaction, scenes[1]);
       canvas2.classList.add('loaded');
-      console.log('✅ Scene 2 loaded:', scenes[1].sceneUrl);
     }
-  } catch (err) {
-    console.error('❌ Failed to load scene:', err);
+
+    cleanupSceneSync = setupSceneContainerSync(splineInstances);
+
+  } catch (error) {
+    console.error('Failed to load scene:', error);
     loader.classList.add('hidden');
   }
 }
 
-// ─── Routes ────────────────────────────────────────────────────
 const routes = [home, service, about];
 
-// ─── Init router ───────────────────────────────────────────────
 const router = new Router(routes, (route) => {
   loadPage(route);
 });
 
 router.bindLinks(navLinks);
-
-// ─── Initial page load ────────────────────────────────────────
 router.resolve(window.location.pathname);
