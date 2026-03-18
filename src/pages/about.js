@@ -4,5 +4,10 @@
 
 export const about = {
   path: '/about',
-  sceneUrl: 'https://prod.spline.design/gD2cgXB6OFWw6R8h/scene.splinecode',
+  scenes: [
+    {
+      id: 'canvas3d',
+      sceneUrl: 'https://prod.spline.design/gD2cgXB6OFWw6R8h/scene.splinecode',
+    },
+  ],
 };

@@ -15,20 +15,71 @@ body {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: #07070a;
+  background: #0b0b0b;
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
 }
 
-/* ─── Canvas ────────────────────────────────────────────────── */
-#canvas3d {
-  display: block;
-  width: 100vw;
+/* ─── Scene Container ───────────────────────────────────────── */
+.scene-container {
+  width: 100%;
   height: 100vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scroll-behavior: smooth;
+}
+
+/* Custom scrollbar — thin, dark green, no arrows */
+.scene-container::-webkit-scrollbar {
+  width: 6px;
+}
+
+.scene-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scene-container::-webkit-scrollbar-thumb {
+  background: #285A48;
+  border-radius: 3px;
+}
+
+.scene-container::-webkit-scrollbar-thumb:hover {
+  background: #408A71;
+}
+
+.scene-container::-webkit-scrollbar-button {
+  display: none;
+}
+
+/* Firefox scrollbar */
+.scene-container {
+  scrollbar-width: thin;
+  scrollbar-color: #285A48 transparent;
+}
+
+/* When only one scene, no scroll needed */
+.scene-container.single-scene {
+  overflow: hidden;
+}
+
+.scene-section {
+  width: 100%;
+  height: 100vh;
+  position: relative;
+}
+
+.scene-section.hidden {
+  display: none;
+}
+
+.scene-section canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
   opacity: 0;
   transition: opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-#canvas3d.loaded {
+.scene-section canvas.loaded {
   opacity: 1;
 }
 
@@ -37,7 +88,7 @@ body {
   position: fixed;
   inset: 0;
   z-index: 9999;
-  background: #07070a;
+  background: #0b0b0b;
   display: flex;
   align-items: center;
   justify-content: center;
